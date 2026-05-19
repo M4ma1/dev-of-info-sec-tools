@@ -60,41 +60,67 @@
 
 ## 3. Архитектура программы
 
-```
-                       ┌─────────────────────────┐
-                       │       <<Singleton>>     │
-                       │      CryptoManager      │
-                       ├─────────────────────────┤
-                       │ + instance() : Crypto&  │
-                       │ + encryptFile(p, pwd)   │
-                       │ + decryptFile(p, pwd)   │
-                       ├─────────────────────────┤
-                       │ - deriveKeyAndIV(...)   │
-                       │ - PBKDF2_ITERATIONS     │
-                       │ - MAGIC[8]              │
-                       └────────────┬────────────┘
-                                    │ использует
-                                    ▼
-                       ┌─────────────────────────┐
-                       │     OpenSSL EVP API     │
-                       │  EVP_aes_256_cbc(),     │
-                       │  EVP_Encrypt/Decrypt_*, │
-                       │  PKCS5_PBKDF2_HMAC,     │
-                       │  RAND_bytes             │
-                       └─────────────────────────┘
+```mermaid
+classDiagram
+    direction LR
 
-   ┌─────────────────────────┐         ┌─────────────────────────┐
-   │        main()           │ создаёт │       FileWalker        │
-   │                         │────────▶│                         │
-   │ – QCommandLineParser    │         │ + run() : int           │
-   │ – валидация аргументов  │         ├─────────────────────────┤
-   └─────────────────────────┘         │ - m_rootPath / m_mode   │
-                                       │ - m_password            │
-                                       └────────────┬────────────┘
-                                                    │ для каждого файла
-                                                    ▼
-                                       CryptoManager::instance().encryptFile()
-                                       CryptoManager::instance().decryptFile()
+    
+
+    class FileWalker {
+        -m_rootPath : QString
+        -m_mode : Mode
+        -m_password : QString
+        +FileWalker(rootPath, mode, password)
+        +run() int
+    }
+
+    class Mode {
+        <<enumeration>>
+        Encrypt
+        Decrypt
+    }
+
+    class CryptoManager {
+        <<Singleton>>
+        -MAGIC : char[8]
+        -PBKDF2_ITERATIONS : 100000
+        -KEY_BYTES : 32
+        -IV_BYTES : 16
+        -SALT_BYTES : 16
+        -CryptoManager()
+        +instance()$ CryptoManager&
+        +encryptFile(filePath, password) bool
+        +decryptFile(filePath, password) bool
+        -deriveKeyAndIV(password, salt, outKey, outIV) bool
+    }
+
+    class OpenSSL_EVP {
+        <<external library>>
+        +EVP_aes_256_cbc()
+        +EVP_EncryptInit_ex()
+        +EVP_EncryptUpdate()
+        +EVP_EncryptFinal_ex()
+        +EVP_DecryptInit_ex()
+        +EVP_DecryptUpdate()
+        +EVP_DecryptFinal_ex()
+        +PKCS5_PBKDF2_HMAC()
+        +RAND_bytes()
+    }
+
+    class Qt_Core {
+        <<external library>>
+        +QCoreApplication
+        +QCommandLineParser
+        +QDirIterator
+        +QFile / QSaveFile
+        +QByteArray
+    }
+
+    FileWalker *-- Mode : holds
+    FileWalker ..> CryptoManager : uses instance()
+    FileWalker ..> Qt_Core : QDirIterator
+    CryptoManager ..> OpenSSL_EVP : uses
+    CryptoManager ..> Qt_Core : QFile / QSaveFile
 ```
 
 ## 4. Инструкция пользователя
